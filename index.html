@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🍽️ ร้านของปริญ - สั่งอาหาร</title>
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, sans-serif; }
+    body { background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); min-height: 100vh; padding: 20px; }
+    .container { max-width: 500px; margin: 0 auto; background: white; border-radius: 20px; padding: 25px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); }
+    h1 { text-align: center; color: #333; margin-bottom: 20px; font-size: 24px; }
+    .greeting { background: #fff3cd; padding: 15px; border-radius: 12px; margin-bottom: 20px; text-align: center; color: #856404; }
+    .greeting img { width: 50px; height: 50px; border-radius: 50%; margin-bottom: 8px; }
+    label { display: block; margin-top: 18px; margin-bottom: 8px; font-weight: bold; color: #555; }
+    select, input, textarea { width: 100%; padding: 14px; border: 2px solid #e0e0e0; border-radius: 12px; font-size: 16px; transition: border 0.3s; }
+    select:focus, input:focus, textarea:focus { outline: none; border-color: #fda085; }
+    .menu-grid { display: grid; gap: 10px; margin-top: 8px; }
+    .menu-item { padding: 15px; border: 2px solid #e0e0e0; border-radius: 12px; cursor: pointer; transition: all 0.3s; background: white; }
+    .menu-item:hover { border-color: #fda085; transform: translateY(-2px); }
+    .menu-item.selected { border-color: #fda085; background: #fff3cd; }
+    .menu-item .name { font-weight: bold; font-size: 16px; }
+    .menu-item .price { color: #d63031; font-size: 14px; margin-top: 4px; }
+    button { width: 100%; padding: 16px; background: linear-gradient(135deg, #fda085, #f6d365); color: white; border: none; border-radius: 12px; font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 25px; transition: transform 0.2s; }
+    button:hover:not(:disabled) { transform: translateY(-2px); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .success { background: #d4edda; color: #155724; padding: 20px; border-radius: 12px; text-align: center; margin-top: 20px; }
+    .loading { text-align: center; padding: 40px; color: #666; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🍽️ ร้านของปริญ</h1>
+    
+    <div id="loading" class="loading">⏳ กำลังโหลด...</div>
+    
+    <div id="form" style="display:none;">
+      <div class="greeting">
+        <img id="userPicture" src="" alt="profile">
+        <div>สวัสดีคุณ <strong id="userName">-</strong> 👋</div>
+      </div>
+
+      <label>🪑 หมายเลขโต๊ะ</label>
+      <select id="tableNumber" required>
+        <option value="">-- เลือกโต๊ะ --</option>
+        <option value="1">โต๊ะ 1</option>
+        <option value="2">โต๊ะ 2</option>
+        <option value="3">โต๊ะ 3</option>
+        <option value="4">โต๊ะ 4</option>
+        <option value="5">โต๊ะ 5</option>
+      </select>
+
+      <label>🍜 เลือกเมนู</label>
+      <div class="menu-grid" id="menuGrid">
+        <div class="menu-item" data-menu="กระเพราหมูสับ">
+          <div class="name">🌶️ กระเพราหมูสับ</div>
+          <div class="price">60 บาท</div>
+        </div>
+        <div class="menu-item" data-menu="ผัดไทย">
+          <div class="name">🍤 ผัดไทย</div>
+          <div class="price">70 บาท</div>
+        </div>
+        <div class="menu-item" data-menu="ข้าวมันไก่">
+          <div class="name">🍗 ข้าวมันไก่</div>
+          <div class="price">55 บาท</div>
+        </div>
+        <div class="menu-item" data-menu="ต้มยำกุ้ง">
+          <div class="name">🦐 ต้มยำกุ้ง</div>
+          <div class="price">120 บาท</div>
+        </div>
+      </div>
+
+      <label>📝 หมายเหตุ (เช่น ไม่เผ็ด, ไม่ใส่ผัก)</label>
+      <textarea id="note" rows="3" placeholder="พิมพ์หมายเหตุ..."></textarea>
+
+      <button id="submitBtn" onclick="submitOrder()">✅ สั่งอาหาร</button>
+    </div>
+
+    <div id="successMsg" class="success" style="display:none;">
+      <h2>✅ รับออเดอร์เรียบร้อย!</h2>
+      <p style="margin-top:10px;">ครัวกำลังเตรียมอาหารของคุณ<br>กรุณารอประมาณ 15-20 นาที 🙏</p>
+    </div>
+  </div>
+
+  <script>
+    const LIFF_ID = "2010126723-kdFzmBYd";
+    const N8N_WEBHOOK_URL = "ใส่_n8n_webhook_url";
+
+    let userProfile = null;
+    let selectedMenu = "";
+
+    liff.init({ liffId: LIFF_ID })
+      .then(() => {
+        if (!liff.isLoggedIn()) {
+          liff.login();
+          return;
+        }
+        return liff.getProfile();
+      })
+      .then(profile => {
+        if (!profile) return;
+        userProfile = profile;
+        document.getElementById('userName').textContent = profile.displayName;
+        document.getElementById('userPicture').src = profile.pictureUrl;
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('form').style.display = 'block';
+      })
+      .catch(err => {
+        document.getElementById('loading').innerHTML = '❌ เกิดข้อผิดพลาด: ' + err.message;
+      });
+
+    document.querySelectorAll('.menu-item').forEach(item => {
+      item.addEventListener('click', () => {
+        document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('selected'));
+        item.classList.add('selected');
+        selectedMenu = item.dataset.menu;
+      });
+    });
+
+    async function submitOrder() {
+      const tableNumber = document.getElementById('tableNumber').value;
+      const note = document.getElementById('note').value;
+      const btn = document.getElementById('submitBtn');
+
+      if (!tableNumber) { alert('กรุณาเลือกโต๊ะ'); return; }
+      if (!selectedMenu) { alert('กรุณาเลือกเมนู'); return; }
+
+      btn.disabled = true;
+      btn.textContent = '⏳ กำลังส่ง...';
+
+      const orderData = {
+        userId: userProfile.userId,
+        Name: userProfile.displayName,
+        tableNumber: tableNumber,
+        menu: selectedMenu,
+        Message: note || "-",
+        pictureUrl: userProfile.pictureUrl
+      };
+
+      try {
+        const response = await fetch(N8N_WEBHOOK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(orderData)
+        });
+
+        if (response.ok) {
+          document.getElementById('form').style.display = 'none';
+          document.getElementById('successMsg').style.display = 'block';
+          setTimeout(() => { if (liff.isInClient()) liff.closeWindow(); }, 3000);
+        } else {
+          throw new Error('Server error');
+        }
+      } catch (err) {
+        alert('❌ เกิดข้อผิดพลาด กรุณาลองใหม่');
+        btn.disabled = false;
+        btn.textContent = '✅ สั่งอาหาร';
+      }
+    }
+  </script>
+</body>
+</html>
